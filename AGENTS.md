@@ -66,11 +66,12 @@ The asset suite uses a dual-framing model to ensure logos look optimal in both s
 ## Maintenance & Packaging
 
 - **Single Executable**: Keep `convert_logo.py` self-contained with no mandatory third-party pip dependencies beyond standard libraries (Pillow is auto-detected or falls back to ImageMagick).
-- **Version Bumping**: When changing features or CLI flags:
-  1. Update `__version__ = "X.Y.Z"` in `convert_logo.py`.
-  2. Update `pkgver=X.Y.Z` and reset `pkgrel=1` in `PKGBUILD`.
-  3. Verify with `makepkg --printsrcinfo` and `./convert_logo.py --version`.
-  4. Update `README.md` if options, outputs, or requirements change.
+- **Version Bumping & Integrity**: Whenever changes or fixes are made to `convert_logo.py`, always perform the following updates before committing:
+  1. Bump `__version__ = "X.Y.Z"` in `convert_logo.py`.
+  2. Bump `pkgver=X.Y.Z` and reset `pkgrel=1` in `PKGBUILD`.
+  3. Recompute and update the SHA256 checksum of `convert_logo.py` in `PKGBUILD` (`sha256sum convert_logo.py` or `updpkgsums`).
+  4. Verify the package with `makepkg --printsrcinfo` and `makepkg --verifysource`.
+  5. Update `README.md` and `AGENTS.md` whenever options, outputs, architecture, or requirements change.
 - **Arch Linux PKGBUILD**:
   - Installs executable to `/usr/bin/convert-logo` with symlink `/usr/bin/convert_logo`.
   - Installs license to `/usr/share/licenses/logo-converter/LICENSE`.
@@ -79,7 +80,8 @@ The asset suite uses a dual-framing model to ensure logos look optimal in both s
 ## Git & Change Workflow
 
 - Core scripts and package definitions live at the repository root.
+- **Pre-Commit Routine**: Whenever `convert_logo.py` is edited, verify that the package version (`pkgver`), script checksum (`sha256sums`), `README.md`, and `AGENTS.md` are updated before creating a commit.
+- **Documentation Integrity**: Keep `README.md` and `AGENTS.md` up to date whenever features, CLI flags, framing rules, or workflows change.
 - **Never run `git commit`** unless the user explicitly asks for a commit in the current message. When asked, write clear, imperative commit messages with concise bulleted descriptions.
 - Untracked user scratchpads or temporary directories are not tracked in Git; do not stage or commit them. Never leak local or machine-specific paths into code, documentation, or commits.
 - Strictly confine implementation to the specific task requested by the user.
-- Maintain this `AGENTS.md` whenever architecture, flags, or packaging conventions evolve.
