@@ -40,19 +40,25 @@ Running `convert_logo.py` with **`-h`**, **`--help`**, **no arguments**, or **in
 | `--scale` | — | `0.72` | Internal framing scale ratio between 0.1 and 1.0 (breathing room). |
 | `--name` | `-n` | *(filename)* | Application / brand display name in `site.webmanifest`. |
 
-### Global Installation (Optional)
+### Installation
 
-To use this script anywhere across your system as a global CLI command:
+#### Arch Linux (PKGBUILD)
+
+Build and install using `makepkg` (automatically resolves dependencies via pacman and registers `convert-logo` system-wide):
+
+```bash
+makepkg -si
+```
+
+#### Manual Installation (Any Linux / macOS)
 
 ```bash
 chmod +x convert_logo.py
-# Copy to your user bin or system bin:
+# User-level install:
 cp convert_logo.py ~/.local/bin/convert-logo
-# Or system-wide:
-sudo cp convert_logo.py /usr/local/bin/convert-logo
 
-# Then run from any directory:
-convert-logo logo.png ./brand_output
+# Or system-wide install:
+sudo cp convert_logo.py /usr/local/bin/convert-logo
 ```
 
 ### Custom Brand Colors & App Name (Optional)

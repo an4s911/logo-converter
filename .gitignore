@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Makepkg build artifacts
+pkg/
+src/
+*.pkg.tar.zst
+*.pkg.tar.xz
+*.log
+
+# Output
+output/
+*_output/
