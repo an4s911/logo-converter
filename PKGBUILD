@@ -24,7 +24,7 @@ source=(
     'LICENSE'
 )
 sha256sums=(
-    'SKIP'
+    '54f3f10df803eff0c651e8160b210cd8049ff14b021151ccfcad44d72e463350'
     'SKIP'
     'SKIP'
 )
