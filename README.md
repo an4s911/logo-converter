@@ -61,9 +61,9 @@ cp convert_logo.py ~/.local/bin/convert-logo
 sudo cp convert_logo.py /usr/local/bin/convert-logo
 ```
 
-### Custom Brand Colors & App Name (Optional)
+### Custom Brand Colors & Scale Options (Optional)
 
-You can customize the color palette and app title via CLI flags:
+You can customize the color palette, app title, and framing scale ratios via CLI flags:
 
 ```bash
 ./convert_logo.py logo.png ./output \
@@ -72,8 +72,13 @@ You can customize the color palette and app title via CLI flags:
   --secondary "#34d399" \
   --dark "#059669" \
   --bg-dark "#080c14" \
-  --bg-light "#ffffff"
+  --bg-light "#ffffff" \
+  --scale 0.72 \
+  --unpadded-scale 0.90
 ```
+
+* `--scale <float>`: Framing scale ratio for padded containers and squircles (default: `0.72`).
+* `--unpadded-scale <float>`: Fill ratio for standalone unpadded logos (default: `0.90`, providing ~5% balanced breathing room).
 
 ### Generated Output Structure
 
@@ -81,30 +86,45 @@ Running the script produces the following complete asset bundle:
 
 ```
 <output_dir>/
-├── favicon.ico                   # Multi-resolution ICO (16x16, 32x32, 48x48)
-├── favicon.svg                   # Scalable vector favicon (crisp on dark & light tabs)
-├── apple-touch-icon.png          # 180x180 iOS squircle home screen icon
-├── android-chrome-192x192.png    # 192x192 Android PWA icon
-├── android-chrome-512x512.png    # 512x512 High-res Android PWA icon
+├── favicon.ico                   # Multi-resolution unpadded ICO (16x16, 32x32, 48x48)
+├── favicon.svg                   # Unpadded vector favicon (crisp on dark & light tabs)
+├── apple-touch-icon.png          # 180x180 padded iOS squircle home screen icon
+├── android-chrome-192x192.png    # 192x192 padded Android PWA icon
+├── android-chrome-512x512.png    # 512x512 padded high-res Android PWA icon
 ├── favicon-16x16.png             # 16x16 browser favicon PNG
 ├── favicon-32x32.png             # 32x32 standard browser favicon PNG
 ├── favicon-48x48.png             # 48x48 desktop shortcut PNG
-├── logo.svg                      # Default plug-and-play black SVG
+├── logo.svg                      # Unpadded default black SVG (edge-to-edge)
 ├── site.webmanifest              # PWA manifest pointing to chrome icons
 └── brand/
+    # [Unpadded Standalone SVGs - No Background, Edge-to-Edge for UI / CSS]
     ├── logo.svg                  # Default black SVG
     ├── logo-black.svg            # Pure black (#000000)
     ├── logo-white.svg            # Pure white (#ffffff)
     ├── logo-primary.svg          # Primary theme color
     ├── logo-gradient.svg         # Primary gradient
     ├── logo-currentcolor.svg     # Uses fill="currentColor" for Tailwind / CSS inheritance
-    ├── logo-dark-bg.svg          # Framed on dark background
-    ├── logo-light-bg.svg         # Framed on light background
-    ├── logo-squircle-dark.svg    # Framed on rounded squircle container
-    ├── logo-squircle-white.svg   # Framed white logo on dark squircle
+    #
+    # [Padded Standalone SVGs - No Background, Framed with Breathing Room]
+    ├── logo-padded.svg           # Padded black vector
+    ├── logo-padded-white.svg     # Padded white vector
+    ├── logo-padded-primary.svg   # Padded primary color vector
+    ├── logo-padded-gradient.svg  # Padded gradient vector
+    ├── logo-padded-currentcolor.svg # Padded currentColor vector
+    #
+    # [Padded Container SVGs - Themed Backgrounds & Squircles]
+    ├── logo-dark-bg.svg          # Padded vector on dark background
+    ├── logo-dark-bg-white.svg    # Padded white vector on dark background
+    ├── logo-light-bg.svg         # Padded vector on light background
+    ├── logo-squircle-dark.svg    # Padded vector on rounded dark squircle
+    ├── logo-squircle-white.svg   # Padded white vector on dark squircle
+    #
+    # [Transparent PNGs - Unpadded Edge-to-Edge]
     ├── logo-black-{size}.png     # Transparent PNGs: 16, 32, 48, 64, 128, 256, 512, 1024
     ├── logo-white-{size}.png     # Transparent PNGs: 16, 32, 48, 64, 128, 256, 512, 1024
     ├── logo-primary-{size}.png   # Transparent PNGs: 16, 32, 48, 64, 128, 256, 512, 1024
+    #
+    # [Padded Container Images - Themed PNGs & JPGs]
     ├── logo-dark-bg-{size}.png   # Dark background PNGs (512, 1024)
     ├── logo-dark-bg-{size}.jpg   # Dark background JPGs (512, 1024)
     ├── logo-light-bg-{size}.png  # Light background PNGs (512, 1024)

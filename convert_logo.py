@@ -28,6 +28,8 @@ import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+__version__ = "1.1.0"
+
 # Auto-detect Pillow (including system pacman/apt packages when inside an isolated venv)
 HAS_PIL = False
 try:
@@ -154,6 +156,39 @@ def normalize_paths(raw_svg_path: Path, temp_dir: Path) -> tuple[list[str], int,
     return path_data, box_w, box_h
 
 
+def get_glyph_bbox(image_path: Path) -> tuple[int, int, int, int] | None:
+    """
+    Detect the tight bounding box (min_x, min_y, max_x, max_y) of the logo mark.
+    Used to center and crop unpadded edge-to-edge assets without altering the normal
+    padding of framed containers and squircles.
+    """
+    if HAS_PIL:
+        img = Image.open(image_path)
+        if "A" in img.getbands():
+            alpha = img.split()[-1]
+            fg = alpha.point(lambda p: 255 if p > 80 else 0, mode="1")
+            return fg.getbbox()
+        else:
+            gray = img.convert("L")
+            fg = gray.point(lambda p: 255 if p < 200 else 0, mode="1")
+            return fg.getbbox()
+    else:
+        magick_bin = "magick" if shutil.which("magick") else "convert"
+        try:
+            out = subprocess.check_output(
+                [magick_bin, str(image_path), "-alpha", "extract", "-threshold", "30%", "-format", "%@", "info:"],
+                stderr=subprocess.PIPE,
+            ).decode().strip()
+            if "x" in out and "+" in out:
+                wh, xy = out.split("+", 1)
+                w, h = [int(v) for v in wh.split("x")]
+                x, y = [int(v) for v in xy.split("+")]
+                return (x, y, x + w, y + h)
+        except Exception:
+            return None
+    return None
+
+
 def build_svg_content(
     path_data: list[str],
     box_w: int,
@@ -162,10 +197,15 @@ def build_svg_content(
     bg_color: str | None = None,
     gradient: bool = False,
     rounded: bool = False,
-    scale: float = 0.72,
+    scale: float = 1.0,
     colors: dict | None = None,
+    viewbox: str | None = None,
 ) -> str:
-    """Construct clean SVG markup with balanced centering and scaling."""
+    """
+    Construct clean SVG markup:
+    - viewbox specified: Custom viewBox (e.g. edge-to-edge square around logo glyph).
+    - viewbox=None: Natural 0 0 box_w box_h viewBox with centered scale transformation.
+    """
     colors = colors or {
         "start": "#34d399",
         "mid": "#10b981",
@@ -186,19 +226,23 @@ def build_svg_content(
 
     bg_rect = ""
     if bg_color:
-        rx = 'rx="22%" ry="22%"' if rounded else ""
+        rx = 'rx="24%" ry="24%"' if rounded else ""
         bg_rect = f'  <rect width="100%" height="100%" fill="{bg_color}" {rx} />\n'
 
-    # Centered scaling transform
-    tx = box_w * (1.0 - scale) / 2.0
-    ty = box_h - (box_h * (1.0 - scale) / 2.0)
-    sx = (scale * 0.1)
-    sy = -(scale * 0.1)
-    transform_str = f"translate({tx:.2f},{ty:.2f}) scale({sx:.6f},{sy:.6f})"
+    if viewbox:
+        vb_str = viewbox
+        transform_str = f"translate(0.00,{box_h:.2f}) scale(0.100000,-0.100000)"
+    else:
+        vb_str = f"0 0 {box_w} {box_h}"
+        tx = box_w * (1.0 - scale) / 2.0
+        ty = box_h - (box_h * (1.0 - scale) / 2.0)
+        sx = (scale * 0.1)
+        sy = -(scale * 0.1)
+        transform_str = f"translate({tx:.2f},{ty:.2f}) scale({sx:.6f},{sy:.6f})"
 
     path_tags = "\n".join([f'    <path d="{d}" />' for d in path_data])
 
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {box_w} {box_h}" fill="none">
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vb_str}" fill="none">
 {defs}
 {bg_rect}  <g transform="{transform_str}" {fill_attr} stroke="none">
 {path_tags}
@@ -280,33 +324,49 @@ EXAMPLES:
 
 GENERATED ASSET SUITE:
   <output_dir>/
-  ├── favicon.ico                   16x16, 32x32, 48x48 multi-resolution icon
-  ├── favicon.svg                   Vector favicon crisp on light and dark browser tabs
-  ├── apple-touch-icon.png          180x180 squircle app icon for iOS home screen
-  ├── android-chrome-192x192.png    192x192 PWA launcher icon
-  ├── android-chrome-512x512.png    512x512 high-resolution PWA icon
-  ├── favicon-16x16.png             16x16 browser tab PNG
-  ├── favicon-32x32.png             32x32 standard browser tab PNG
-  ├── favicon-48x48.png             48x48 desktop shortcut PNG
-  ├── logo.svg                      Default black vector logo
-  ├── site.webmanifest              PWA web manifest
+  ├── favicon.ico                     16x16, 32x32, 48x48 unpadded browser tab icon
+  ├── favicon.svg                     Unpadded vector favicon (crisp on dark & light tabs)
+  ├── apple-touch-icon.png            180x180 padded squircle icon for iOS home screen
+  ├── android-chrome-192x192.png      192x192 padded squircle PWA icon
+  ├── android-chrome-512x512.png      512x512 padded squircle high-res PWA icon
+  ├── favicon-16x16.png               16x16 browser tab PNG
+  ├── favicon-32x32.png               32x32 standard browser tab PNG
+  ├── favicon-48x48.png               48x48 desktop shortcut PNG
+  ├── logo.svg                        Unpadded black vector logo (edge-to-edge)
+  ├── site.webmanifest                PWA web manifest
   └── brand/
-      ├── logo-black.svg            Solid black vector (#000000)
-      ├── logo-white.svg            Solid white vector (#ffffff)
-      ├── logo-primary.svg          Primary theme color vector
-      ├── logo-gradient.svg         Three-stop linear gradient vector
-      ├── logo-currentcolor.svg     Plug-and-play SVG using fill="currentColor"
-      ├── logo-dark-bg.svg          Vector on dark background container
-      ├── logo-light-bg.svg         Vector on light background container
-      ├── logo-squircle-dark.svg    Vector on squircle dark container
-      ├── logo-squircle-white.svg   White vector on squircle dark container
-      ├── logo-black-{size}.png     Transparent PNGs (16, 32, 48, 64, 128, 256, 512, 1024)
-      ├── logo-white-{size}.png     Transparent PNGs (16, 32, 48, 64, 128, 256, 512, 1024)
-      ├── logo-primary-{size}.png   Transparent PNGs (16, 32, 48, 64, 128, 256, 512, 1024)
-      ├── logo-dark-bg-{size}.png   Dark background PNGs (512, 1024)
-      ├── logo-dark-bg-{size}.jpg   Dark background JPGs (512, 1024)
-      ├── logo-light-bg-{size}.png  Light background PNGs (512, 1024)
-      └── logo-light-bg-{size}.jpg  Light background JPGs (512, 1024)
+      ├── [Unpadded Standalone SVGs - No Background, Edge-to-Edge for UI / CSS]
+      ├── logo.svg                    Default black vector
+      ├── logo-black.svg              Solid black vector (#000000)
+      ├── logo-white.svg              Solid white vector (#ffffff)
+      ├── logo-primary.svg            Primary theme vector
+      ├── logo-gradient.svg           Three-stop linear gradient vector
+      ├── logo-currentcolor.svg       Plug-and-play SVG using fill="currentColor"
+      │
+      ├── [Padded Standalone SVGs - No Background, Framed with Breathing Room]
+      ├── logo-padded.svg             Padded black vector
+      ├── logo-padded-white.svg       Padded white vector
+      ├── logo-padded-primary.svg     Padded primary color vector
+      ├── logo-padded-gradient.svg    Padded gradient vector
+      ├── logo-padded-currentcolor.svg Padded currentColor vector
+      │
+      ├── [Padded Container SVGs - Themed Backgrounds & Squircles]
+      ├── logo-dark-bg.svg            Padded vector on dark background
+      ├── logo-dark-bg-white.svg      Padded white vector on dark background
+      ├── logo-light-bg.svg           Padded vector on light background
+      ├── logo-squircle-dark.svg      Padded vector on dark squircle container
+      ├── logo-squircle-white.svg     Padded white vector on dark squircle container
+      │
+      ├── [Transparent PNGs - Unpadded Edge-to-Edge]
+      ├── logo-black-{size}.png       Transparent PNGs (16, 32, 48, 64, 128, 256, 512, 1024)
+      ├── logo-white-{size}.png       Transparent PNGs (16, 32, 48, 64, 128, 256, 512, 1024)
+      ├── logo-primary-{size}.png     Transparent PNGs (16, 32, 48, 64, 128, 256, 512, 1024)
+      │
+      ├── [Padded Container Images - Themed PNGs & JPGs]
+      ├── logo-dark-bg-{size}.png     Dark background PNGs (512, 1024)
+      ├── logo-dark-bg-{size}.jpg     Dark background JPGs (512, 1024)
+      ├── logo-light-bg-{size}.png    Light background PNGs (512, 1024)
+      └── logo-light-bg-{size}.jpg    Light background JPGs (512, 1024)
 
 SYSTEM REQUIREMENTS:
   - potrace        (Bézier vectorizer)
@@ -365,13 +425,25 @@ SYSTEM REQUIREMENTS:
         type=float,
         default=0.72,
         metavar="FLOAT",
-        help="Internal framing scale ratio between 0.1 and 1.0 (default: 0.72)",
+        help="Internal framing scale ratio for padded containers (default: 0.72)",
+    )
+    parser.add_argument(
+        "--unpadded-scale",
+        type=float,
+        default=0.90,
+        metavar="FLOAT",
+        help="Framing scale ratio for unpadded standalone logos (default: 0.90)",
     )
     parser.add_argument(
         "-n", "--name",
         default="",
         metavar="NAME",
         help="Application / brand name for site.webmanifest (default: derived from filename)",
+    )
+    parser.add_argument(
+        "-V", "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
 
     # If run with no options/arguments, display full help screen
@@ -405,30 +477,60 @@ SYSTEM REQUIREMENTS:
         temp_dir = Path(temp_dir_str)
 
         # 1. Extract Mask & Vectorize
-        print(" -> Extracting foreground mask and vectorizing with potrace...")
+        print(" -> Extracting foreground mask and vectorizing...")
         pbm_path = make_pbm_mask(input_path, temp_dir)
         raw_svg = vectorize_mask(pbm_path, temp_dir)
         path_data, box_w, box_h = normalize_paths(raw_svg, temp_dir)
-        print(f" -> Extracted {len(path_data)} smooth vector path(s) ({box_w}x{box_h})")
+        print(f" -> Canvas size: {box_w}x{box_h}")
+        print(f" -> Extracted {len(path_data)} smooth vector path(s)")
+
+        # Detect glyph bounding box for clean unpadded assets (with ~5% breathing room, default 0.90 scale)
+        glyph_bbox = get_glyph_bbox(input_path)
+        if glyph_bbox:
+            gx, gy, gx2, gy2 = glyph_bbox
+            gw = gx2 - gx
+            gh = gy2 - gy
+            cx = (gx + gx2) / 2.0
+            cy = (gy + gy2) / 2.0
+            max_dim = max(gw, gh)
+            unpadded_scale = min(max(args.unpadded_scale, 0.1), 1.0)
+            box_size = max_dim / unpadded_scale
+            vx = cx - box_size / 2.0
+            vy = cy - box_size / 2.0
+            unpadded_viewbox = f"{vx:.2f} {vy:.2f} {box_size:.2f} {box_size:.2f}"
+            print(f" -> Logo glyph bounds: {gw}x{gh} -> Unpadded viewBox: {unpadded_viewbox} (scale: {unpadded_scale})")
+        else:
+            unpadded_viewbox = f"0 0 {box_w} {box_h}"
 
         # 2. Build SVG Variants
-        print(" -> Generating SVG variants...")
+        print(" -> Generating SVG variants (both unpadded edge-to-edge and padded)...")
         svg_variants = {
-            # Brand folder
-            brand_dir / "logo.svg": build_svg_content(path_data, box_w, box_h, fill="#000000", scale=args.scale),
-            brand_dir / "logo-black.svg": build_svg_content(path_data, box_w, box_h, fill="#000000", scale=args.scale),
-            brand_dir / "logo-white.svg": build_svg_content(path_data, box_w, box_h, fill="#ffffff", scale=args.scale),
-            brand_dir / "logo-primary.svg": build_svg_content(path_data, box_w, box_h, fill=args.primary, scale=args.scale),
-            brand_dir / "logo-gradient.svg": build_svg_content(path_data, box_w, box_h, gradient=True, scale=args.scale, colors=colors),
-            brand_dir / "logo-currentcolor.svg": build_svg_content(path_data, box_w, box_h, fill="currentColor", scale=args.scale),
+            # Unpadded standalone brand SVGs (no background, edge-to-edge based on glyph for UI & component styling)
+            brand_dir / "logo.svg": build_svg_content(path_data, box_w, box_h, fill="#000000", viewbox=unpadded_viewbox),
+            brand_dir / "logo-black.svg": build_svg_content(path_data, box_w, box_h, fill="#000000", viewbox=unpadded_viewbox),
+            brand_dir / "logo-white.svg": build_svg_content(path_data, box_w, box_h, fill="#ffffff", viewbox=unpadded_viewbox),
+            brand_dir / "logo-primary.svg": build_svg_content(path_data, box_w, box_h, fill=args.primary, viewbox=unpadded_viewbox),
+            brand_dir / "logo-gradient.svg": build_svg_content(path_data, box_w, box_h, gradient=True, viewbox=unpadded_viewbox, colors=colors),
+            brand_dir / "logo-currentcolor.svg": build_svg_content(path_data, box_w, box_h, fill="currentColor", viewbox=unpadded_viewbox),
+
+            # Padded standalone brand SVGs (no background, framed with breathing room using original canvas)
+            brand_dir / "logo-padded.svg": build_svg_content(path_data, box_w, box_h, fill="#000000", scale=args.scale),
+            brand_dir / "logo-padded-black.svg": build_svg_content(path_data, box_w, box_h, fill="#000000", scale=args.scale),
+            brand_dir / "logo-padded-white.svg": build_svg_content(path_data, box_w, box_h, fill="#ffffff", scale=args.scale),
+            brand_dir / "logo-padded-primary.svg": build_svg_content(path_data, box_w, box_h, fill=args.primary, scale=args.scale),
+            brand_dir / "logo-padded-gradient.svg": build_svg_content(path_data, box_w, box_h, gradient=True, scale=args.scale, colors=colors),
+            brand_dir / "logo-padded-currentcolor.svg": build_svg_content(path_data, box_w, box_h, fill="currentColor", scale=args.scale),
+
+            # Padded themed container SVGs (maintaining original canvas framing & comfortable padding)
             brand_dir / "logo-dark-bg.svg": build_svg_content(path_data, box_w, box_h, gradient=True, bg_color=args.bg_dark, scale=args.scale, colors=colors),
             brand_dir / "logo-dark-bg-white.svg": build_svg_content(path_data, box_w, box_h, fill="#ffffff", bg_color=args.bg_dark, scale=args.scale),
             brand_dir / "logo-light-bg.svg": build_svg_content(path_data, box_w, box_h, gradient=True, bg_color=args.bg_light, scale=args.scale, colors=colors),
             brand_dir / "logo-squircle-dark.svg": build_svg_content(path_data, box_w, box_h, gradient=True, bg_color=args.bg_dark, rounded=True, scale=args.scale, colors=colors),
             brand_dir / "logo-squircle-white.svg": build_svg_content(path_data, box_w, box_h, fill="#ffffff", bg_color=args.bg_dark, rounded=True, scale=args.scale),
-            # Root public files
-            out_root / "logo.svg": build_svg_content(path_data, box_w, box_h, fill="#000000", scale=args.scale),
-            out_root / "favicon.svg": build_svg_content(path_data, box_w, box_h, gradient=True, scale=args.scale, colors=colors),
+
+            # Root public files (unpadded for clean layout alignment and sharp browser tabs)
+            out_root / "logo.svg": build_svg_content(path_data, box_w, box_h, fill="#000000", viewbox=unpadded_viewbox),
+            out_root / "favicon.svg": build_svg_content(path_data, box_w, box_h, gradient=True, viewbox=unpadded_viewbox, colors=colors),
         }
 
         for path, svg_code in svg_variants.items():

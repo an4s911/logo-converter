@@ -1,7 +1,7 @@
 # Maintainer: Anas Bashir <nasbas23@gmail.com>
 
 pkgname=logo-converter
-pkgver=1.0.0
+pkgver=1.1.0
 pkgrel=1
 pkgdesc="CLI tool to convert raster logos into scalable vector SVGs, multi-resolution PNGs, and favicon suites"
 arch=('any')
